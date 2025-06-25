@@ -75,6 +75,12 @@
       margin-top: 10px;
       background: none;
     }
+
+    #image-preview {
+      margin-top: 10px;
+      max-width: 100%;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -92,14 +98,13 @@
   <div class="color-bar"></div>
   <div class="color-labels">
     <span>0%</span>
+    <span>5%</span>
     <span>10%</span>
     <span>15%</span>
-    <span>35%</span>
-    <span>60%</span>
+    <span>30%</span>
   </div>
-
-  <strong>Address</strong>
   <div id="address">Hover or click a point</div>
+  <img id="image-preview" alt="Street View Overlay">
 </div>
 
 <script>
@@ -118,12 +123,13 @@
   let gviStats = [];
   let clickFeature = null;
   let hoverFeature = null;
+  const imagePreview = document.getElementById('image-preview');
 
   function getColor(val) {
-    if (val < 0.10) return '#3C2F2F'; // Dark brown (0-10%)
-    if (val < 0.15) return '#FF9800'; // Orange (10-15%)
-    if (val < 0.35) return '#D4A017'; // Yellow-green (15-35%)
-    return '#4CAF50'; // Green (35-60% and above)
+    if (val < 0.05) return '#3C2F2F'; // Dark brown (0-5%)
+    if (val < 0.10) return '#FF9800'; // Orange (5-10%)
+    if (val < 0.15) return '#D4A017'; // Yellow-green (10-15%)
+    return '#4CAF50'; // Green (15-30% and above)
   }
     
   function drawHistogram(selected = null) {
@@ -170,6 +176,17 @@
       ctx.lineTo(selected * canvas.width, canvas.height);
       ctx.stroke();
     }
+  }
+
+  function loadImage(feature) {
+    const filename = feature.properties.filename;
+    const imageUrl = `https://raw.githubusercontent.com/ottoykh/treepedia/refs/heads/main/image/2009/${filename}_overlay.jpg`;
+    imagePreview.src = imageUrl;
+    imagePreview.style.display = 'block';
+    imagePreview.onerror = () => {
+      imagePreview.style.display = 'none';
+      console.error('Failed to load image:', imageUrl);
+    };
   }
 
   map.on('load', () => {
@@ -223,10 +240,10 @@
               ['linear'],
               ['get', 'GVI'],
               0, '#3C2F2F',
-              0.10, '#FF9800',
-              0.15, '#D4A017',
-              0.35, '#4CAF50',
-              0.60, '#4CAF50'
+              0.05, '#FF9800',
+              0.10, '#D4A017',
+              0.15, '#4CAF50',
+              0.30, '#4CAF50'
             ],
             'circle-stroke-width': 0,
             'circle-opacity': 0.9
@@ -268,6 +285,9 @@
           document.getElementById('gvi-dot').style.backgroundColor = getColor(gvi);
           document.getElementById('address').textContent = addr;
 
+          // Load and display image
+          loadImage(feature);
+
           // Update histogram on hover
           drawHistogram(gvi);
 
@@ -294,6 +314,7 @@
             document.getElementById('gvi-value').textContent = `${meanGVIPct}%`;
             document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI);
             document.getElementById('address').textContent = 'Mean value';
+            imagePreview.style.display = 'none';
             drawHistogram();
             map.getSource('click-dot').setData({ type: 'FeatureCollection', features: [] });
           }
@@ -311,6 +332,9 @@
           document.getElementById('gvi-value').textContent = `${gviPct}%`;
           document.getElementById('gvi-dot').style.backgroundColor = getColor(gvi);
           document.getElementById('address').textContent = addr;
+
+          // Load and display image
+          loadImage(feature);
 
           drawHistogram(gvi);
 
