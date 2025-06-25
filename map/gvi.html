@@ -51,6 +51,13 @@
       font-weight: bold;
     }
 
+    .gvi-diff {
+      font-size: 12px;
+      color: #999;
+      margin-left: 5px;
+      vertical-align: super;
+    }
+
     #address {
       margin-top: 10px;
       color: #ccc;
@@ -77,12 +84,49 @@
       background: none;
     }
 
-    #image-preview {
+    .image-container {
+      position: relative;
       margin-top: 10px;
+      max-width: 100%;
+    }
+
+    #image-preview {
       max-width: 100%;
       display: none;
       border-radius: 6px;
       box-shadow: 0 0 8px rgba(0,0,0,0.7);
+    }
+
+    .image-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: rgba(63, 185, 80, 0.8);
+      border: none;
+      padding: 8px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      user-select: none;
+      transition: background-color 0.3s ease;
+    }
+
+    .image-nav:hover:enabled {
+      background-color: #36a840;
+    }
+
+    .image-nav:disabled {
+      background-color: #555;
+      cursor: default;
+    }
+
+    #image-prev {
+      left: 5px;
+    }
+
+    #image-next {
+      right: 5px;
     }
 
     #toggleDataBtn {
@@ -104,36 +148,6 @@
       letter-spacing: 0.02em;
     }
     #toggleDataBtn:hover {
-      background-color: #36a840;
-    }
-
-    /* New toggle buttons for paired points */
-    #pairToggleButtons {
-      margin-top: 10px;
-      display: flex;
-      justify-content: space-between;
-    }
-
-    #pairToggleButtons button {
-      background-color: #3fb950;
-      border: none;
-      padding: 4px 12px;
-      color: white;
-      font-weight: bold;
-      font-size: 14px;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      box-shadow: 0 0 6px #3fb950;
-      transition: background-color 0.3s ease;
-      width: 45%;
-    }
-    #pairToggleButtons button:disabled {
-      background-color: #555;
-      cursor: default;
-      box-shadow: none;
-    }
-    #pairToggleButtons button:hover:enabled {
       background-color: #36a840;
     }
   </style>
@@ -162,12 +176,11 @@
   </div>
   <div id="address">Hover or click a point</div>
   
-  <div id="pairToggleButtons" style="display:none;">
-    <button id="btnPrev" title="2009">&lt; 2009</button>
-    <button id="btnNext" title="2019">2019 &gt;</button>
+  <div class="image-container">
+    <img id="image-preview" alt="Street View Overlay">
+    <button class="image-nav" id="image-prev" title="2009"><</button>
+    <button class="image-nav" id="image-next" title="2019">></button>
   </div>
-
-  <img id="image-preview" alt="Street View Overlay">
 </div>
 
 <script>
@@ -187,11 +200,8 @@
 
   const imagePreview = document.getElementById('image-preview');
   const toggleDataBtn = document.getElementById('toggleDataBtn');
-
-  // Pair toggle buttons
-  const pairToggleDiv = document.getElementById('pairToggleButtons');
-  const btnPrev = document.getElementById('btnPrev');
-  const btnNext = document.getElementById('btnNext');
+  const imagePrev = document.getElementById('image-prev');
+  const imageNext = document.getElementById('image-next');
 
   // URLs for datasets
   const dataUrls = {
@@ -277,6 +287,8 @@
   function loadImage(feature, year) {
     if (!feature) {
       imagePreview.style.display = 'none';
+      imagePrev.style.display = 'none';
+      imageNext.style.display = 'none';
       return;
     }
     const filename = feature.properties.filename;
@@ -285,8 +297,20 @@
     imagePreview.style.display = 'block';
     imagePreview.onerror = () => {
       imagePreview.style.display = 'none';
+      imagePrev.style.display = 'none';
+      imageNext.style.display = 'none';
       console.error('Failed to load image:', imageUrl);
     };
+    // Show navigation buttons only if paired points exist
+    if (pairedPoints) {
+      imagePrev.style.display = pairedPoints["2009"] ? 'block' : 'none';
+      imageNext.style.display = pairedPoints["2019"] ? 'block' : 'none';
+      imagePrev.disabled = !pairedPoints["2009"] || pairedCurrentYear === "2009";
+      imageNext.disabled = !pairedPoints["2019"] || pairedCurrentYear === "2019";
+    } else {
+      imagePrev.style.display = 'none';
+      imageNext.style.display = 'none';
+    }
   }
 
   // Haversine formula for distance between two lat/lng in meters
@@ -326,10 +350,13 @@
   // Show feature info in UI
   function showFeatureInfo(feature, year) {
     if (!feature) {
-      document.getElementById('gvi-value').textContent = 'No Data';
+      document.getElementById('gvi-value').innerHTML = 'No Data';
       document.getElementById('gvi-dot').style.backgroundColor = '#555';
       document.getElementById('address').textContent = '';
       imagePreview.style.display = 'none';
+      imagePrev.style.display = 'none';
+      imageNext.style.display = 'none';
+      drawHistogram();
       return;
     }
     const gvi = parseFloat(feature.properties.GVI);
@@ -338,32 +365,20 @@
     const lng = feature.properties.lng.toFixed(5);
     const addr = `Lat: ${lat}, Lng: ${lng} (${year})`;
 
-    document.getElementById('gvi-value').textContent = `${gviPct}%`;
+    // Calculate GVI difference if paired points exist
+    let gviDiffText = '';
+    if (pairedPoints && pairedPoints["2009"] && pairedPoints["2019"]) {
+      const gvi2009 = parseFloat(pairedPoints["2009"].properties.GVI);
+      const gvi2019 = parseFloat(pairedPoints["2019"].properties.GVI);
+      const diff = ((gvi2019 - gvi2009) * 100).toFixed(1);
+      gviDiffText = `<span class="gvi-diff">(${diff > 0 ? '+' : ''}${diff}%)</span>`;
+    }
+
+    document.getElementById('gvi-value').innerHTML = `${gviPct}%${gviDiffText}`;
     document.getElementById('gvi-dot').style.backgroundColor = getColor(gvi);
     document.getElementById('address').textContent = addr;
     loadImage(feature, year);
-  }
-
-  // Update toggle buttons inside info box based on pairedPoints state
-  function updatePairToggleButtons() {
-    if (!pairedPoints) {
-      pairToggleDiv.style.display = 'none';
-      return;
-    }
-    pairToggleDiv.style.display = 'flex';
-
-    // Enable both buttons if both points exist
-    btnPrev.disabled = !pairedPoints["2009"];
-    btnNext.disabled = !pairedPoints["2019"];
-
-    // Highlight the button of the current year displayed
-    if (pairedCurrentYear === "2009") {
-      btnPrev.style.backgroundColor = '#4caf50';
-      btnNext.style.backgroundColor = '#3fb950';
-    } else {
-      btnNext.style.backgroundColor = '#4caf50';
-      btnPrev.style.backgroundColor = '#3fb950';
-    }
+    drawHistogram(gvi);
   }
 
   // Update map "click-dot" layer data to show current feature
@@ -405,10 +420,12 @@
     const meanGVI = gviStats.reduce((a, b) => a + b, 0) / gviStats.length;
     const meanGVIPct = (meanGVI * 100).toFixed(1);
 
-    document.getElementById('gvi-value').textContent = `${meanGVIPct}%`;
+    document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%`;
     document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI);
     document.getElementById('address').textContent = `Mean value (${year})`;
     imagePreview.style.display = 'none';
+    imagePrev.style.display = 'none';
+    imageNext.style.display = 'none';
     drawHistogram();
 
     if (map.getSource('gvi-points')) {
@@ -485,12 +502,10 @@
       // Start by showing clicked year feature
       pairedCurrentYear = year;
       showFeatureInfo(pairedPoints[pairedCurrentYear], pairedCurrentYear);
-      updatePairToggleButtons();
       updateClickDot(pairedPoints[pairedCurrentYear]);
     } else {
       // No pair found, just show clicked feature info
       showFeatureInfo(feature, year);
-      pairToggleDiv.style.display = 'none';
       updateClickDot(feature);
     }
   }
@@ -515,10 +530,12 @@
       map.getCanvas().style.cursor = '';
       const meanGVI = gviStats.reduce((a, b) => a + b, 0) / gviStats.length;
       const meanGVIPct = (meanGVI * 100).toFixed(1);
-      document.getElementById('gvi-value').textContent = `${meanGVIPct}%`;
+      document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%`;
       document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI);
       document.getElementById('address').textContent = `Mean value (${currentYear})`;
       imagePreview.style.display = 'none';
+      imagePrev.style.display = 'none';
+      imageNext.style.display = 'none';
       drawHistogram();
       updateClickDot(null);
     });
@@ -541,7 +558,6 @@
       // If in paired view, clear pair and reload single year view
       pairedPoints = null;
       pairedCurrentYear = null;
-      pairToggleDiv.style.display = 'none';
       updateClickDot(null);
     }
     currentYear = (currentYear === "2019") ? "2009" : "2019";
@@ -549,23 +565,21 @@
     await loadData(currentYear);
   });
 
-  // Pair toggle buttons events
-  btnPrev.addEventListener('click', () => {
+  // Image navigation buttons events
+  imagePrev.addEventListener('click', () => {
     if (!pairedPoints) return;
     if (pairedCurrentYear === "2019" && pairedPoints["2009"]) {
       pairedCurrentYear = "2009";
       showFeatureInfo(pairedPoints["2009"], "2009");
-      updatePairToggleButtons();
       updateClickDot(pairedPoints["2009"]);
     }
   });
 
-  btnNext.addEventListener('click', () => {
+  imageNext.addEventListener('click', () => {
     if (!pairedPoints) return;
     if (pairedCurrentYear === "2009" && pairedPoints["2019"]) {
       pairedCurrentYear = "2019";
       showFeatureInfo(pairedPoints["2019"], "2019");
-      updatePairToggleButtons();
       updateClickDot(pairedPoints["2019"]);
     }
   });
