@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Green View Index Map 2009</title>
+  <title>Green View Index Map</title>
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
@@ -59,7 +59,7 @@
     .color-bar {
       height: 12px;
       margin-top: 15px;
-      background: linear-gradient(to right, #3C2F2F, #D4A017, #A9D62A, #4CAF50, #00BCD4);
+      background: linear-gradient(to right, #3C2F2F, #FF9800, #D4A017, #4CAF50, #4CAF50);
       border-radius: 6px;
     }
 
@@ -82,7 +82,7 @@
 <div id="map"></div>
 
 <div class="info-box">
-  <h2>Green View Index in 2009</h2>
+  <h2>Green View Index</h2>
   <div class="legend">
     <span class="dot" id="gvi-dot" style="background-color:#3fb950;"></span>
     <span id="gvi-value">Hover or click a point</span>
@@ -92,9 +92,9 @@
   <div class="color-bar"></div>
   <div class="color-labels">
     <span>0%</span>
+    <span>10%</span>
     <span>15%</span>
-    <span>30%</span>
-    <span>45%</span>
+    <span>35%</span>
     <span>60%</span>
   </div>
 
@@ -120,11 +120,10 @@
   let hoverFeature = null;
 
   function getColor(val) {
-    if (val < 0.15) return '#3C2F2F';
-    if (val < 0.30) return '#D4A017';
-    if (val < 0.45) return '#A9D62A';
-    if (val < 0.60) return '#4CAF50';
-    return '#00BCD4';
+    if (val < 0.10) return '#3C2F2F'; // Dark brown (0-10%)
+    if (val < 0.15) return '#FF9800'; // Orange (10-15%)
+    if (val < 0.35) return '#D4A017'; // Yellow-green (15-35%)
+    return '#4CAF50'; // Green (35-60% and above)
   }
     
   function drawHistogram(selected = null) {
@@ -206,8 +205,8 @@
           type: 'circle',
           source: 'gvi-points',
           paint: {
-            'circle-radius': 10, // Larger hitbox
-            'circle-color': 'rgba(0, 0, 0, 0)', // Invisible
+            'circle-radius': 10,
+            'circle-color': 'rgba(0, 0, 0, 0)',
             'circle-stroke-width': 0
           }
         });
@@ -224,10 +223,10 @@
               ['linear'],
               ['get', 'GVI'],
               0, '#3C2F2F',
+              0.10, '#FF9800',
               0.15, '#D4A017',
-              0.30, '#A9D62A',
-              0.45, '#4CAF50',
-              0.60, '#00BCD4'
+              0.35, '#4CAF50',
+              0.60, '#4CAF50'
             ],
             'circle-stroke-width': 0,
             'circle-opacity': 0.9
