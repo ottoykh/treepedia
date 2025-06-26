@@ -169,6 +169,21 @@
     #toggleDataBtn:hover, #toggleDiffBtn:hover {
       background-color: #36a840;
     }
+
+    #loading-popup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      z-index: 100;
+      font-size: 16px;
+      display: none;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -202,6 +217,8 @@
   </div>
 </div>
 
+<div id="loading-popup">Loading data...</div>
+
 <script>
   mapboxgl.accessToken = 'pk.eyJ1Ijoib3R0by15dSIsImEiOiJjbDVpMnpwenMwNDgyM2NvMngybGNiemh4In0.cnKIPTuXF8OWxFnZhb56mQ';
 
@@ -228,6 +245,7 @@
   const imageNext = document.getElementById('image-next');
   const colorBar = document.getElementById('color-bar');
   const colorLabels = document.getElementById('color-labels');
+  const loadingPopup = document.getElementById('loading-popup');
 
   const dataUrls = {
     "2009": 'https://raw.githubusercontent.com/ottoykh/treepedia/main/geodata/2009GVI.geojson',
@@ -450,6 +468,7 @@
 
   async function loadData(year) {
     currentYear = year;
+    loadingPopup.style.display = 'block';
 
     try {
       if (!data2009) {
@@ -488,8 +507,11 @@
       console.error('Error loading data:', error);
       document.getElementById('gvi-value').innerHTML = 'Data Load Error<span class="gvi-diff"></span>';
       document.getElementById('address').textContent = 'Failed to load data';
+      loadingPopup.style.display = 'none';
       return;
     }
+
+    loadingPopup.style.display = 'none';
 
     if (isDiffView) {
       diffData = {
@@ -728,7 +750,6 @@
   });
 
   map.on('load', init);
-  
 </script>
 </body>
 </html>
