@@ -53,7 +53,7 @@
 
     .gvi-diff {
       font-size: 12px;
-      color: #999;
+      color: #bbb;
       margin-left: 5px;
       vertical-align: super;
     }
@@ -67,8 +67,12 @@
     .color-bar {
       height: 12px;
       margin-top: 15px;
-      background: linear-gradient(to right, #3C2F2F, #FF9800, #D4A017, #4CAF50, #4CAF50);
+      background: linear-gradient(to right, #3C2F2F, #FF9800, #4CAF50, #4CAF50);
       border-radius: 6px;
+    }
+
+    .color-bar.diff-view {
+      background: linear-gradient(to right, #FF0000, #FF5722, #3C2F2F, #4CAF50, #3fb950);
     }
 
     .color-labels {
@@ -129,10 +133,9 @@
       right: 5px;
     }
 
-    #toggleDataBtn {
+    #toggleDataBtn, #toggleDiffBtn {
       position: absolute;
       top: 20px;
-      left: 20px;
       z-index: 20;
       padding: 4px 10px;
       border: none;
@@ -147,7 +150,23 @@
       transition: background-color 0.3s ease;
       letter-spacing: 0.02em;
     }
-    #toggleDataBtn:hover {
+
+    #toggleDataBtn {
+      left: 50px;
+    }
+
+    #toggleDiffBtn {
+      left: 20px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      font-size: 10px;
+      line-height: 20px;
+      text-align: center;
+      padding: 0;
+    }
+
+    #toggleDataBtn:hover, #toggleDiffBtn:hover {
       background-color: #36a840;
     }
   </style>
@@ -156,30 +175,30 @@
 
 <div id="map"></div>
 
-<button id="toggleDataBtn">2009</button>
+<button id="toggleDiffBtn" title="Toggle Difference View">●</button>
+<button id="toggleDataBtn">2024</button>
 
 <div class="info-box">
   <h2>Green View Index</h2>
   <div class="legend">
     <span class="dot" id="gvi-dot" style="background-color:#3fb950;"></span>
-    <span id="gvi-value">Hover or click a point</span>
+    <span id="gvi-value">Hover or click a point<span class="gvi-diff"></span></span>
   </div>
   <canvas id="histCanvas" width="280" height="60"></canvas>
 
-  <div class="color-bar"></div>
-  <div class="color-labels">
+  <div class="color-bar" id="color-bar"></div>
+  <div class="color-labels" id="color-labels">
     <span>0%</span>
     <span>5%</span>
-    <span>10%</span>
     <span>15%</span>
-    <span>30%</span>
+    <span>>30%</span>
   </div>
   <div id="address">Hover or click a point</div>
   
   <div class="image-container">
     <img id="image-preview" alt="Street View Overlay">
-    <button class="image-nav" id="image-prev" title="2009"><</button>
-    <button class="image-nav" id="image-next" title="2019">></button>
+    <button class="image-nav" id="image-prev" title="Previous Year"><</button>
+    <button class="image-nav" id="image-next" title="Next Year">></button>
   </div>
 </div>
 
@@ -197,83 +216,102 @@
   const ctx = canvas.getContext('2d');
   const bins = new Array(60).fill(0);
   let gviStats = [];
+  let gviStats2009 = [];
+  let gviStats2023 = [];
+  let gviStats2024 = [];
+  let diffStats = [];
 
   const imagePreview = document.getElementById('image-preview');
   const toggleDataBtn = document.getElementById('toggleDataBtn');
+  const toggleDiffBtn = document.getElementById('toggleDiffBtn');
   const imagePrev = document.getElementById('image-prev');
   const imageNext = document.getElementById('image-next');
+  const colorBar = document.getElementById('color-bar');
+  const colorLabels = document.getElementById('color-labels');
 
-  // URLs for datasets
   const dataUrls = {
-    "2009": 'https://raw.githubusercontent.com/ottoykh/treepedia/refs/heads/main/geodata/2009GVI.geojson',
-    "2019": 'https://raw.githubusercontent.com/ottoykh/treepedia/refs/heads/main/geodata/2019GVI.geojson'
+    "2009": 'https://raw.githubusercontent.com/ottoykh/treepedia/main/geodata/2009GVI.geojson',
+    "2019": 'https://raw.githubusercontent.com/ottoykh/treepedia/main/geodata/2019GVI.geojson',
+    "2023": 'https://raw.githubusercontent.com/ottoykh/treepedia/main/geodata/2023GVI.geojson',
+    "2024": 'https://raw.githubusercontent.com/ottoykh/treepedia/main/geodata/2024GVI.geojson'
   };
 
-  // Data holders
   let data2009 = null;
   let data2019 = null;
+  let data2023 = null;
+  let data2024 = null;
+  let diffData = null;
 
-  // Current main data shown on map (toggles 2009/2019 dataset)
-  let currentYear = "2019";
+  let currentYear = "2024";
+  let isDiffView = false;
 
-  // Track selected paired points
-  // Format: { "2009": feature, "2019": feature }
   let pairedPoints = null;
-  // Which year currently displayed in paired view ("2009" or "2019")
   let pairedCurrentYear = null;
 
-  function getColor(val) {
-    if (val < 0.05) return '#3C2F2F'; // Dark brown (0-5%)
-    if (val < 0.10) return '#FF9800'; // Orange (5-10%)
-    if (val < 0.15) return '#D4A017'; // Yellow-green (10-15%)
-    return '#4CAF50'; // Green (15-30% and above)
+  function getColor(val, diffView = false) {
+    if (!diffView) {
+      if (val < 0.05) return '#3C2F2F'; // Brown
+      if (val < 0.15) return '#FF9800'; // Orange
+      return '#4CAF50'; // Green
+    } else {
+      if (val <= -0.15) return '#FF0000'; // Red
+      if (val < -0.05) return '#FF5722'; // Orange
+      if (val < 0.05) return '#3C2F2F'; // Brown
+      if (val < 0.15) return '#4CAF50'; // Green
+      return '#3fb950'; // Light Green
+    }
   }
 
   function drawHistogram(selected = null) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const stats = isDiffView ? diffStats : (pairedCurrentYear === "2009" ? gviStats2009 : pairedCurrentYear === "2023" ? gviStats2023 : pairedCurrentYear === "2024" ? gviStats2024 : gviStats);
     const max = Math.max(...bins) || 1;
     const barWidth = canvas.width / bins.length;
 
-    if (gviStats.length === 0) return;
+    if (stats.length === 0) return;
 
-    const mean = gviStats.reduce((a, b) => a + b, 0) / gviStats.length;
-    const std = Math.sqrt(gviStats.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / gviStats.length);
+    const mean = stats.reduce((a, b) => a + b, 0) / stats.length;
+    const std = Math.sqrt(stats.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / stats.length);
 
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    const stdStart = Math.max(0, mean - std);
-    const stdEnd = Math.min(1, mean + std);
-    ctx.fillRect(stdStart * canvas.width, 0, (stdEnd - stdStart) * canvas.width, canvas.height);
+    const stdStart = isDiffView ? Math.max(-0.3, mean - std) : Math.max(0, mean - std);
+    const stdEnd = isDiffView ? Math.min(0.3, mean + std) : Math.min(1, mean + std);
+    const scale = isDiffView ? 0.6 : 1;
+    const offset = isDiffView ? 0.3 : 0;
+    ctx.fillRect((stdStart + offset) * canvas.width / scale, 0, 
+                 (stdEnd - stdStart) * canvas.width / scale, canvas.height);
 
-    ctx.beginPath();
-    ctx.strokeStyle = '#3fb950';
-    ctx.lineWidth = 2;
     for (let i = 0; i < bins.length; i++) {
-      const x = i * barWidth + barWidth / 2;
-      const y = canvas.height - (bins[i] / max) * 50;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      const val = isDiffView ? (i / 60 * 0.6 - 0.3) : (i / 60);
+      ctx.fillStyle = getColor(val, isDiffView);
+      const height = (bins[i] / max) * canvas.height;
+      ctx.fillRect(i * barWidth, canvas.height - height, barWidth, height);
     }
-    ctx.stroke();
 
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(mean * canvas.width, 0);
-    ctx.lineTo(mean * canvas.width, canvas.height);
+    const meanX = (mean + offset) * canvas.width / scale;
+    ctx.moveTo(meanX, 0);
+    ctx.lineTo(meanX, canvas.height);
     ctx.stroke();
 
     if (selected !== null) {
       ctx.strokeStyle = '#ff9933';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(selected * canvas.width, 0);
-      ctx.lineTo(selected * canvas.width, canvas.height);
+      const selectedX = (selected + offset) * canvas.width / scale;
+      ctx.moveTo(selectedX, 0);
+      ctx.lineTo(selectedX, canvas.height);
       ctx.stroke();
+      ctx.fillStyle = '#ff9933';
+      ctx.font = '10px Arial';
+      ctx.fillText(`${(selected * 100).toFixed(1)}%`, selectedX + 5, 15);
     }
 
     ctx.fillStyle = '#ccc';
     ctx.font = '10px Arial';
-    ctx.fillText('GVI (%)', canvas.width / 2 - 15, canvas.height - 2);
+    ctx.fillText(isDiffView ? 'GVI Δ (%)' : 'GVI (%)', canvas.width / 2 - 15, canvas.height - 2);
     ctx.save();
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('Count', -canvas.height / 2 - 10, 10);
@@ -281,18 +319,20 @@
 
     ctx.font = '11px Arial';
     ctx.fillStyle = '#aaa';
-    ctx.fillText('Histogram of Green View Index', 40, 10);
+    ctx.fillText(isDiffView ? `Histogram of GVI Change (${currentYear}-2009)` : `Histogram of Green View Index (${pairedCurrentYear || currentYear})`, 40, 10);
   }
 
   function loadImage(feature, year) {
-    if (!feature) {
-      imagePreview.style.display = 'none';
-      imagePrev.style.display = 'none';
-      imageNext.style.display = 'none';
+    imagePreview.style.display = 'none';
+    imagePrev.style.display = 'none';
+    imageNext.style.display = 'none';
+
+    if (!feature || !feature.properties || !feature.properties.filename) {
       return;
     }
+
     const filename = feature.properties.filename;
-    const imageUrl = `https://raw.githubusercontent.com/ottoykh/treepedia/refs/heads/main/image/${year}/${filename}_overlay.jpg`;
+    const imageUrl = `https://raw.githubusercontent.com/ottoykh/treepedia/main/image/${year}/${filename}_overlay.jpg`;
     imagePreview.src = imageUrl;
     imagePreview.style.display = 'block';
     imagePreview.onerror = () => {
@@ -301,21 +341,21 @@
       imageNext.style.display = 'none';
       console.error('Failed to load image:', imageUrl);
     };
-    // Show navigation buttons only if paired points exist
+
     if (pairedPoints) {
-      imagePrev.style.display = pairedPoints["2009"] ? 'block' : 'none';
-      imageNext.style.display = pairedPoints["2019"] ? 'block' : 'none';
-      imagePrev.disabled = !pairedPoints["2009"] || pairedCurrentYear === "2009";
-      imageNext.disabled = !pairedPoints["2019"] || pairedCurrentYear === "2019";
-    } else {
-      imagePrev.style.display = 'none';
-      imageNext.style.display = 'none';
+      const years = ["2009", "2019", "2023", "2024"].filter(y => pairedPoints[y]);
+      const currentIndex = years.indexOf(pairedCurrentYear);
+      imagePrev.style.display = currentIndex > 0 ? 'block' : 'none';
+      imageNext.style.display = currentIndex < years.length - 1 ? 'block' : 'none';
+      imagePrev.disabled = currentIndex <= 0;
+      imageNext.disabled = currentIndex >= years.length - 1;
+      imagePrev.title = currentIndex > 0 ? years[currentIndex - 1] : '';
+      imageNext.title = currentIndex < years.length - 1 ? years[currentIndex + 1] : '';
     }
   }
 
-  // Haversine formula for distance between two lat/lng in meters
   function distanceMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // metres
+    const R = 6371e3;
     const phi1 = lat1 * Math.PI/180;
     const phi2 = lat2 * Math.PI/180;
     const dPhi = (lat2-lat1) * Math.PI/180;
@@ -329,13 +369,16 @@
     return R * c;
   }
 
-  // Find nearest point in dataset (otherYearData) to selectedFeature within maxDistanceMeters
   function findNearestFeature(selectedFeature, otherYearData, maxDistanceMeters = 10) {
+    if (!selectedFeature || !selectedFeature.properties || !otherYearData || !otherYearData.features) {
+      return null;
+    }
     const lat1 = selectedFeature.properties.lat;
     const lon1 = selectedFeature.properties.lng;
     let nearestFeature = null;
     let nearestDist = Infinity;
     for (const f of otherYearData.features) {
+      if (!f.properties || !f.properties.lat || !f.properties.lng) continue;
       const lat2 = f.properties.lat;
       const lon2 = f.properties.lng;
       const dist = distanceMeters(lat1, lon1, lat2, lon2);
@@ -347,10 +390,9 @@
     return nearestFeature;
   }
 
-  // Show feature info in UI
   function showFeatureInfo(feature, year) {
-    if (!feature) {
-      document.getElementById('gvi-value').innerHTML = 'No Data';
+    if (!feature || !feature.properties) {
+      document.getElementById('gvi-value').innerHTML = 'No Data<span class="gvi-diff"></span>';
       document.getElementById('gvi-dot').style.backgroundColor = '#555';
       document.getElementById('address').textContent = '';
       imagePreview.style.display = 'none';
@@ -359,73 +401,146 @@
       drawHistogram();
       return;
     }
-    const gvi = parseFloat(feature.properties.GVI);
+
+    let gvi = parseFloat(feature.properties.originalGVI || feature.properties.GVI);
     const gviPct = (gvi * 100).toFixed(1);
-    const lat = feature.properties.lat.toFixed(5);
-    const lng = feature.properties.lng.toFixed(5);
+    const lat = feature.properties.lat ? feature.properties.lat.toFixed(5) : 'N/A';
+    const lng = feature.properties.lng ? feature.properties.lng.toFixed(5) : 'N/A';
     const addr = `Lat: ${lat}, Lng: ${lng} (${year})`;
 
-    // Calculate GVI difference if paired points exist
+    let gviDiff = null;
     let gviDiffText = '';
-    if (pairedPoints && pairedPoints["2009"] && pairedPoints["2019"]) {
+    let dotColor = getColor(gvi, isDiffView);
+
+    if (pairedPoints && pairedPoints["2009"] && pairedPoints[year]) {
       const gvi2009 = parseFloat(pairedPoints["2009"].properties.GVI);
-      const gvi2019 = parseFloat(pairedPoints["2019"].properties.GVI);
-      const diff = ((gvi2019 - gvi2009) * 100).toFixed(1);
-      gviDiffText = `<span class="gvi-diff">(${diff > 0 ? '+' : ''}${diff}%)</span>`;
+      const gviCurrent = parseFloat(pairedPoints[year].properties.originalGVI || pairedPoints[year].properties.GVI);
+      gviDiff = gviCurrent - gvi2009;
+      const diffPct = (gviDiff * 100).toFixed(1);
+      gviDiffText = `(${diffPct > 0 ? '+' : ''}${diffPct}%)`;
+      if (isDiffView) {
+        dotColor = getColor(gviDiff, true);
+      }
     }
 
-    document.getElementById('gvi-value').innerHTML = `${gviPct}%${gviDiffText}`;
-    document.getElementById('gvi-dot').style.backgroundColor = getColor(gvi);
+    document.getElementById('gvi-value').innerHTML = `${gviPct}%${gviDiffText ? `<span class="gvi-diff">${gviDiffText}</span>` : ''}`;
+    document.getElementById('gvi-dot').style.backgroundColor = dotColor;
     document.getElementById('address').textContent = addr;
     loadImage(feature, year);
-    drawHistogram(gvi);
+    drawHistogram(isDiffView ? gviDiff : gvi);
   }
 
-  // Update map "click-dot" layer data to show current feature
   function updateClickDot(feature) {
+    if (!feature || !feature.geometry || !feature.geometry.coordinates) {
+      map.getSource('click-dot').setData({
+        type: 'FeatureCollection',
+        features: []
+      });
+      return;
+    }
     map.getSource('click-dot').setData({
       type: 'FeatureCollection',
-      features: feature ? [{
+      features: [{
         type: 'Feature',
         geometry: { type: 'Point', coordinates: feature.geometry.coordinates },
         properties: feature.properties
-      }] : []
+      }]
     });
   }
 
-  // Load and show main data on map, draw histogram
   async function loadData(year) {
     currentYear = year;
 
-    // Load both datasets if not loaded yet
-    if (!data2009) {
-      const resp2009 = await fetch(dataUrls["2009"]);
-      data2009 = await resp2009.json();
-    }
-    if (!data2019) {
-      const resp2019 = await fetch(dataUrls["2019"]);
-      data2019 = await resp2019.json();
+    try {
+      if (!data2009) {
+        const resp2009 = await fetch(dataUrls["2009"]);
+        if (!resp2009.ok) throw new Error(`Failed to fetch 2009 data: ${resp2009.status}`);
+        data2009 = await resp2009.json();
+        gviStats2009 = data2009.features
+          .map(f => parseFloat(f.properties.GVI))
+          .filter(val => val > 0);
+      }
+      if (!data2019) {
+        const resp2019 = await fetch(dataUrls["2019"]);
+        if (!resp2019.ok) throw new Error(`Failed to fetch 2019 data: ${resp2019.status}`);
+        data2019 = await resp2019.json();
+        gviStats = data2019.features
+          .map(f => parseFloat(f.properties.GVI))
+          .filter(val => val > 0);
+      }
+      if (!data2023) {
+        const resp2023 = await fetch(dataUrls["2023"]);
+        if (!resp2023.ok) throw new Error(`Failed to fetch 2023 data: ${resp2023.status}`);
+        data2023 = await resp2023.json();
+        gviStats2023 = data2023.features
+          .map(f => parseFloat(f.properties.GVI))
+          .filter(val => val > 0);
+      }
+      if (!data2024) {
+        const resp2024 = await fetch(dataUrls["2024"]);
+        if (!resp2024.ok) throw new Error(`Failed to fetch 2024 data: ${resp2024.status}`);
+        data2024 = await resp2024.json();
+        gviStats2024 = data2024.features
+          .map(f => parseFloat(f.properties.GVI))
+          .filter(val => val > 0);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      document.getElementById('gvi-value').innerHTML = 'Data Load Error<span class="gvi-diff"></span>';
+      document.getElementById('address').textContent = 'Failed to load data';
+      return;
     }
 
-    // Select which data to show on map
-    const mainData = (year === "2019") ? data2019 : data2009;
+    if (isDiffView) {
+      diffData = {
+        type: 'FeatureCollection',
+        features: []
+      };
+      diffStats.length = 0;
+      const baseData = year === "2024" ? data2024 : year === "2023" ? data2023 : data2019;
+      for (const f of baseData.features) {
+        const pairedFeature = findNearestFeature(f, data2009, 10);
+        if (pairedFeature) {
+          const diffGVI = parseFloat(f.properties.GVI) - parseFloat(pairedFeature.properties.GVI);
+          diffData.features.push({
+            type: 'Feature',
+            geometry: f.geometry,
+            properties: {
+              GVI: diffGVI,
+              originalGVI: f.properties.GVI,
+              lat: f.properties.lat,
+              lng: f.properties.lng,
+              filename: f.properties.filename,
+              paired2009: pairedFeature
+            }
+          });
+          diffStats.push(diffGVI);
+        }
+      }
+    }
+
+    const mainData = isDiffView ? diffData : (year === "2009" ? data2009 : year === "2023" ? data2023 : year === "2024" ? data2024 : data2019);
 
     bins.fill(0);
-    gviStats = mainData.features.map(f => parseFloat(f.properties.GVI));
-    gviStats.forEach(val => {
-      const bin = Math.min(Math.floor(val * 60), 59);
+    const stats = isDiffView ? diffStats : (year === "2009" ? gviStats2009 : year === "2023" ? gviStats2023 : year === "2024" ? gviStats2024 : gviStats);
+    stats.forEach(val => {
+      const bin = Math.min(Math.floor((val + (isDiffView ? 0.3 : 0)) * 60 / (isDiffView ? 0.6 : 1)), 59);
       bins[bin]++;
     });
 
-    const meanGVI = gviStats.reduce((a, b) => a + b, 0) / gviStats.length;
+    const meanGVI = stats.length > 0 ? stats.reduce((a, b) => a + b, 0) / stats.length : 0;
     const meanGVIPct = (meanGVI * 100).toFixed(1);
 
-    document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%`;
-    document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI);
-    document.getElementById('address').textContent = `Mean value (${year})`;
+    document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%<span class="gvi-diff"></span>`;
+    document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI, isDiffView);
+    document.getElementById('address').textContent = isDiffView ? `Mean change (${year}-2009)` : `Mean value (${year})`;
     imagePreview.style.display = 'none';
     imagePrev.style.display = 'none';
     imageNext.style.display = 'none';
+    colorBar.className = `color-bar ${isDiffView ? 'diff-view' : ''}`;
+    colorLabels.innerHTML = isDiffView ? 
+      `<span>-30%</span><span>-10%</span><span>0%</span><span>10%</span><span>30%</span>` :
+      `<span>0%</span><span>5%</span><span>15%</span><span>>30%</span>`;
     drawHistogram();
 
     if (map.getSource('gvi-points')) {
@@ -452,11 +567,11 @@
             'interpolate',
             ['linear'],
             ['get', 'GVI'],
-            0, '#3C2F2F',
-            0.05, '#FF9800',
-            0.10, '#D4A017',
-            0.15, '#4CAF50',
-            0.30, '#4CAF50'
+            isDiffView ? -0.3 : 0, isDiffView ? '#FF0000' : '#3C2F2F',
+            isDiffView ? -0.1 : 0.05, isDiffView ? '#FF5722' : '#FF9800',
+            isDiffView ? 0.0 : 0.15, isDiffView ? '#3C2F2F' : '#4CAF50',
+            isDiffView ? 0.1 : 0.30, isDiffView ? '#4CAF50' : '#4CAF50',
+            isDiffView ? 0.3 : 1, isDiffView ? '#3fb950' : '#4CAF50'
           ],
           'circle-stroke-width': 0,
           'circle-opacity': 0.9
@@ -482,44 +597,55 @@
     }
   }
 
-  // Handle user clicking a point on the map
   function onFeatureClick(feature, year) {
-    // Reset pairing
+    if (!feature || !feature.properties || !feature.geometry) return;
+
     pairedPoints = null;
     pairedCurrentYear = null;
 
-    // Find paired feature from other year if any
-    const otherYear = (year === "2019") ? "2009" : "2019";
-    const otherData = (otherYear === "2019") ? data2019 : data2009;
-
-    const pairedFeature = findNearestFeature(feature, otherData, 10);
-
-    if (pairedFeature) {
+    if (!isDiffView) {
       pairedPoints = {};
       pairedPoints[year] = feature;
-      pairedPoints[otherYear] = pairedFeature;
-
-      // Start by showing clicked year feature
+      const otherYears = ["2009", "2019", "2023", "2024"].filter(y => y !== year);
+      const otherData = {
+        "2009": data2009,
+        "2019": data2019,
+        "2023": data2023,
+        "2024": data2024
+      };
+      for (const otherYear of otherYears) {
+        const pairedFeature = findNearestFeature(feature, otherData[otherYear], 10);
+        if (pairedFeature) {
+          pairedPoints[otherYear] = pairedFeature;
+        }
+      }
       pairedCurrentYear = year;
       showFeatureInfo(pairedPoints[pairedCurrentYear], pairedCurrentYear);
       updateClickDot(pairedPoints[pairedCurrentYear]);
     } else {
-      // No pair found, just show clicked feature info
-      showFeatureInfo(feature, year);
-      updateClickDot(feature);
+      const pairedFeature = findNearestFeature(feature, data2009, 10);
+      if (pairedFeature) {
+        pairedPoints = {
+          [year]: feature,
+          "2009": pairedFeature
+        };
+        pairedCurrentYear = year;
+        showFeatureInfo(pairedPoints[pairedCurrentYear], pairedCurrentYear);
+        updateClickDot(feature);
+      } else {
+        showFeatureInfo(feature, year);
+        updateClickDot(feature);
+      }
     }
   }
 
-  // Setup map interactions
   function setupMapInteractions() {
     map.on('mousemove', 'gvi-hitbox', (e) => {
-      if (pairedPoints) return; // disable hover when paired view active
+      if (pairedPoints || !e.features || !e.features[0]) return;
 
       const feature = e.features[0];
       map.getCanvas().style.cursor = 'pointer';
-
-      const year = currentYear;
-
+      const year = isDiffView ? currentYear : currentYear;
       showFeatureInfo(feature, year);
       updateClickDot(feature);
     });
@@ -528,11 +654,12 @@
       if (pairedPoints) return;
 
       map.getCanvas().style.cursor = '';
-      const meanGVI = gviStats.reduce((a, b) => a + b, 0) / gviStats.length;
+      const stats = isDiffView ? diffStats : (currentYear === "2009" ? gviStats2009 : currentYear === "2023" ? gviStats2023 : currentYear === "2024" ? gviStats2024 : gviStats);
+      const meanGVI = stats.length > 0 ? stats.reduce((a, b) => a + b, 0) / stats.length : 0;
       const meanGVIPct = (meanGVI * 100).toFixed(1);
-      document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%`;
-      document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI);
-      document.getElementById('address').textContent = `Mean value (${currentYear})`;
+      document.getElementById('gvi-value').innerHTML = `${meanGVIPct}%<span class="gvi-diff"></span>`;
+      document.getElementById('gvi-dot').style.backgroundColor = getColor(meanGVI, isDiffView);
+      document.getElementById('address').textContent = isDiffView ? `Mean change (${currentYear}-2009)` : `Mean value (${pairedCurrentYear || currentYear})`;
       imagePreview.style.display = 'none';
       imagePrev.style.display = 'none';
       imageNext.style.display = 'none';
@@ -541,46 +668,62 @@
     });
 
     map.on('click', 'gvi-hitbox', (e) => {
+      if (!e.features || !e.features[0]) return;
       const feature = e.features[0];
-      onFeatureClick(feature, currentYear);
+      onFeatureClick(feature, isDiffView ? currentYear : currentYear);
     });
   }
 
-  // Initialize app
   async function init() {
     await loadData(currentYear);
     setupMapInteractions();
   }
 
-  // Handle toggle data button (2009/2019)
   toggleDataBtn.addEventListener('click', async () => {
+    if (isDiffView) return;
     if (pairedPoints) {
-      // If in paired view, clear pair and reload single year view
       pairedPoints = null;
       pairedCurrentYear = null;
       updateClickDot(null);
     }
-    currentYear = (currentYear === "2019") ? "2009" : "2019";
-    toggleDataBtn.textContent = (currentYear === "2019") ? "2009" : "2019";
+    const years = ["2009", "2019", "2023", "2024"];
+    const currentIndex = years.indexOf(currentYear);
+    currentYear = years[(currentIndex + 1) % years.length];
+    toggleDataBtn.textContent = currentYear;
     await loadData(currentYear);
   });
 
-  // Image navigation buttons events
+  toggleDiffBtn.addEventListener('click', async () => {
+    isDiffView = !isDiffView;
+    toggleDiffBtn.textContent = isDiffView ? 'Δ' : '●';
+    toggleDataBtn.disabled = isDiffView;
+    if (pairedPoints) {
+      pairedPoints = null;
+      pairedCurrentYear = null;
+      updateClickDot(null);
+    }
+    await loadData(currentYear);
+  });
+
   imagePrev.addEventListener('click', () => {
     if (!pairedPoints) return;
-    if (pairedCurrentYear === "2019" && pairedPoints["2009"]) {
-      pairedCurrentYear = "2009";
-      showFeatureInfo(pairedPoints["2009"], "2009");
-      updateClickDot(pairedPoints["2009"]);
+    const years = ["2009", "2019", "2023", "2024"].filter(y => pairedPoints[y]);
+    const currentIndex = years.indexOf(pairedCurrentYear);
+    if (currentIndex > 0) {
+      pairedCurrentYear = years[currentIndex - 1];
+      showFeatureInfo(pairedPoints[pairedCurrentYear], pairedCurrentYear);
+      updateClickDot(pairedPoints[pairedCurrentYear]);
     }
   });
 
   imageNext.addEventListener('click', () => {
     if (!pairedPoints) return;
-    if (pairedCurrentYear === "2009" && pairedPoints["2019"]) {
-      pairedCurrentYear = "2019";
-      showFeatureInfo(pairedPoints["2019"], "2019");
-      updateClickDot(pairedPoints["2019"]);
+    const years = ["2009", "2019", "2023", "2024"].filter(y => pairedPoints[y]);
+    const currentIndex = years.indexOf(pairedCurrentYear);
+    if (currentIndex < years.length - 1) {
+      pairedCurrentYear = years[currentIndex + 1];
+      showFeatureInfo(pairedPoints[pairedCurrentYear], pairedCurrentYear);
+      updateClickDot(pairedPoints[pairedCurrentYear]);
     }
   });
 
