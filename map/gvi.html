@@ -283,7 +283,9 @@
         ctx.restore();
         ctx.fillStyle = '#aaa';
         ctx.font = '11px Arial';
-        ctx.fillText(isDiffView ? `GVI Change (${currentYear}-2009)` : `Green View Index (${currentYear})`, 10, 12);
+        ctx.textAlign = 'right';
+        ctx.fillText(isDiffView ? `GVI Change (${currentYear}-2009)` : `Green View Index (${currentYear})`, canvas.width - 10, 12);
+        ctx.textAlign = 'left';
         return;
       }
       const validStats = stats.filter(val => !isNaN(val) && val !== null);
@@ -291,7 +293,7 @@
       const std = validStats.length > 0 ? Math.sqrt(validStats.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / validStats.length) : 0;
       const scale = isDiffView ? 0.6 : 1;
       const offset = isDiffView ? 0.3 : 0;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fillStyle = 'rgba(255, 255, 105, 0.1)';
       const stdStart = isDiffView ? Math.max(-0.3, mean - std) : Math.max(0, mean - std);
       const stdEnd = isDiffView ? Math.min(0.3, mean + std) : Math.min(1, mean + std);
       ctx.fillRect((stdStart + offset) * canvas.width / scale, 0, 
@@ -328,9 +330,11 @@
       ctx.rotate(-Math.PI / 2);
       ctx.fillText('Count', -canvas.height / 2 - 10, 12);
       ctx.restore();
-      ctx.font = '11px Arial';
       ctx.fillStyle = '#aaa';
-      ctx.fillText(isDiffView ? `GVI Change (${currentYear}-2009)` : `Green View Index (${currentYear})`, 10, 12);
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(isDiffView ? `GVI Change (${currentYear}-2009)` : `Green View Index (${currentYear})`, canvas.width - 10, 12);
+      ctx.textAlign = 'left';
     }
     function loadImage(feature, year) {
       imagePreview.style.display = 'none';
@@ -474,7 +478,7 @@
         }
         if (!data2023) {
           const resp2023 = await fetch(dataUrls["2023"]);
-          if (!resp2023.ok) throw new Error(`Failed to fetch 2016 data: ${resp2023.status}`);
+          if (!resp2023.ok) throw new Error(`Failed to fetch 2023 data: ${resp2023.status}`);
           data2023 = await resp2023.json();
           gviStats2023 = data2023.features
             .map(f => parseFloat(f.properties.GVI))
