@@ -190,7 +190,7 @@
   </div>
   <div id="loading-popup">Loading data...</div>
   <script>
-    mapboxgl.accessToken = 'pk.eyJ1Ijoib3R0by15dSIsImEiOiJjbDVpMnpwenMwNDgyM2NvMngybGNiemh4In0.cnKIPTuXF8OWxFnZhb56mQ';
+    mapboxgl.accessToken = 'pk.eyJ1IjoiamFjb2JuMHgiLCJhIjoiY204NmM2YjJkMDM2eDJqcXUxNGZrMHptYyJ9.2yh44mpmkTOS404uv3bxYg';
     const map = new mapboxgl.Map({
       container: 'map',
       style: 'mapbox://styles/mapbox/dark-v10',
@@ -396,7 +396,7 @@
       }
       return nearestFeature;
     }
-    function showFeatureInfo(feature, year) {
+               function showFeatureInfo(feature, year) {
       if (!feature || !feature.properties) {
         document.getElementById('gvi-value').innerHTML = 'No Data<span class="gvi-diff"></span>';
         document.getElementById('gvi-dot').style.backgroundColor = '#555';
@@ -404,6 +404,7 @@
         imagePreview.style.display = 'none';
         imagePrev.style.display = 'none';
         imageNext.style.display = 'none';
+        imagePreview.onclick = null; // Clear any existing click event
         drawHistogram();
         return;
       }
@@ -430,23 +431,22 @@
       document.getElementById('address').textContent = addr;
       loadImage(feature, year);
       drawHistogram(isDiffView ? gviDiff : gvi);
-    }
-    function updateClickDot(feature) {
-      if (!feature || !feature.geometry || !feature.geometry.coordinates) {
-        map.getSource('click-dot').setData({
-          type: 'FeatureCollection',
-          features: []
-        });
-        return;
-      }
-      map.getSource('click-dot').setData({
-        type: 'FeatureCollection',
-        features: [{
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: feature.geometry.coordinates },
-          properties: feature.properties
-        }]
-      });
+      // Add click event to image preview to open panorama in a popup window with 16:9 aspect ratio
+      imagePreview.onclick = feature.properties.filename ? () => {
+        const panoUrl = `https://ottoykh.github.io/Treepedia2/Pano.html?url=https://raw.githubusercontent.com/ottoykh/treepedia/main/image/${year}/${feature.properties.filename}_overlay.jpg`;
+        const maxWidth = window.innerWidth * 0.8; // 80% of parent window width
+        const maxHeight = window.innerHeight * 0.8; // 80% of parent window height
+        // Calculate 16:9 dimensions, constrained by maxWidth and maxHeight
+        let width = maxWidth;
+        let height = width * 9 / 16;
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * 16 / 9;
+        }
+        const left = (window.innerWidth - width) / 2; // Center horizontally
+        const top = (window.innerHeight - height) / 2; // Center vertically
+        window.open(panoUrl, '_blank', `width=${Math.round(width)},height=${Math.round(height)},top=${Math.round(top)},left=${Math.round(left)}`);
+      } : null;
     }
     async function loadData(year) {
       currentYear = year;
